@@ -1,0 +1,17 @@
+erDiagram
+    POSTS {
+        BIGINT id PK
+        VARCHAR title
+        TEXT content
+        VARCHAR author
+        DATETIME created_at
+        DATETIME updated_at
+    }
+    COMMENTS {
+        BIGINT id PK
+        TEXT content
+        VARCHAR author
+        BIGINT post_id "logical reference only"
+        DATETIME created_at
+    }
+    POSTS ||..o{ COMMENTS : "linked by post_id (enforced in app, not DB)"

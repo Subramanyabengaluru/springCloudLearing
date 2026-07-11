@@ -1,0 +1,16 @@
+flowchart LR
+    C([Client / curl])
+    C -->|:8080| GW[API Gateway<br/>Spring Cloud Gateway]
+
+    GW -->|/api/posts/**| PS[post-service<br/>:8081]
+    GW -->|/api/comments/**| CS[comment-service<br/>:8082]
+
+    CS -.->|GET /api/posts/&#123;id&#125;/exists| PS
+
+    PS --> PDB[(posts_db)]
+    CS --> CDB[(comments_db)]
+
+    subgraph MySQL["MySQL container (miniblog-mysql :3306)"]
+        PDB
+        CDB
+    end

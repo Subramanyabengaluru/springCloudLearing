@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant C as Client
+    participant GW as API Gateway (:8080)
+    participant CS as comment-service (:8082)
+    participant PS as post-service (:8081)
+    participant CDB as comments_db
+
+    C->>GW: POST /api/comments {postId, content, author}
+    GW->>CS: forward (Path=/api/comments/**)
+    CS->>PS: GET /api/posts/{postId}/exists
+    alt post exists
+        PS-->>CS: 200 OK
+        CS->>CDB: INSERT comment
+        CS-->>GW: 201 Created {comment}
+        GW-->>C: 201 Created {comment}
+    else post missing
+        PS-->>CS: 404 Not Found
+        CS-->>GW: 404 "Post not found"
+        GW-->>C: 404 "Post not found"
+    end

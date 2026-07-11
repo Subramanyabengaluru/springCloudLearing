@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant C as Client
+    participant GW as API Gateway (:8080)
+    participant PS as post-service (:8081)
+    participant PDB as posts_db
+
+    C->>GW: POST /api/posts {title, content, author}
+    GW->>PS: forward (Path=/api/posts/**)
+    PS->>PDB: INSERT post
+    PDB-->>PS: id
+    PS-->>GW: 201 Created {post}
+    GW-->>C: 201 Created {post}

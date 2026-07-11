@@ -1,0 +1,23 @@
+flowchart TD
+    C([Client / curl])
+    C -->|:8080| GW[API Gateway<br/>lb:// routing]
+
+    subgraph Registry["Service Discovery"]
+        EU[(Eureka Server<br/>:8761)]
+    end
+
+    GW -. registers & queries .-> EU
+    PS[post-service<br/>:8081] -. registers .-> EU
+    CS[comment-service<br/>:8082] -. registers .-> EU
+
+    GW -->|lb://post-service| PS
+    GW -->|lb://comment-service| CS
+    CS -->|http://post-service via LoadBalancer| PS
+
+    PS --> PDB[(posts_db)]
+    CS --> CDB[(comments_db)]
+
+    subgraph MySQL["MySQL container (miniblog-mysql :3306)"]
+        PDB
+        CDB
+    end

@@ -1,0 +1,284 @@
+openapi: 3.0.3
+info:
+  title: Mini Blog API
+  description: |
+    Public API exposed through the Spring Cloud Gateway (`:8080`) in front of
+    `post-service` and `comment-service`. Requests are routed by path:
+      - `/api/posts/**`    -> `post-service` (owns `posts_db`)
+      - `/api/comments/**` -> `comment-service` (owns `comments_db`)
+    `comment-service` verifies a post exists via `GET /api/posts/{id}/exists`
+    before accepting a comment.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: API Gateway (local)
+
+tags:
+  - name: Posts
+    description: CRUD for blog posts (post-service)
+  - name: Comments
+    description: CRUD for comments (comment-service)
+
+paths:
+  /api/posts:
+    post:
+      tags: [Posts]
+      summary: Create a post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostRequest' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: URI of the created post
+              schema: { type: string, example: /api/posts/1 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+    get:
+      tags: [Posts]
+      summary: List all posts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PostResponse' }
+
+  /api/posts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PostId'
+    get:
+      tags: [Posts]
+      summary: Get one post
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Posts]
+      summary: Update a post
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Posts]
+      summary: Delete a post
+      responses:
+        '204': { description: Deleted (no body) }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/posts/{id}/exists:
+    parameters:
+      - $ref: '#/components/parameters/PostId'
+    get:
+      tags: [Posts]
+      summary: Lightweight existence check (status-only)
+      description: |
+        Returns `200` with an empty body if the post exists, `404` otherwise.
+        Used internally by `comment-service` before saving a comment; safe to
+        call from clients too.
+      responses:
+        '200': { description: Post exists (no body) }
+        '404': { description: Post does not exist (no body) }
+
+  /api/comments:
+    post:
+      tags: [Comments]
+      summary: Add a comment to a post
+      description: |
+        Rejects with `404` if the referenced `postId` does not exist (verified
+        via a synchronous call to `post-service`), and with `503` if
+        `post-service` is unreachable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentRequest' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: URI of the created comment
+              schema: { type: string, example: /api/comments/1 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommentResponse' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404':
+          description: Referenced post does not exist
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503': { $ref: '#/components/responses/PostServiceUnavailable' }
+    get:
+      tags: [Comments]
+      summary: List comments for a post
+      parameters:
+        - in: query
+          name: postId
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+          example: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CommentResponse' }
+        '400':
+          description: Missing or invalid `postId`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  /api/comments/{commentId}:
+    parameters:
+      - in: path
+        name: commentId
+        required: true
+        schema: { type: integer, format: int64, minimum: 1 }
+    delete:
+      tags: [Comments]
+      summary: Delete a comment
+      responses:
+        '204': { description: Deleted (no body) }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  parameters:
+    PostId:
+      in: path
+      name: id
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+      example: 1
+
+  schemas:
+    PostRequest:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: Hello
+        content:
+          type: string
+          minLength: 1
+          example: My first post
+        author:
+          type: string
+          maxLength: 100
+          nullable: true
+          example: alice
+
+    PostResponse:
+      type: object
+      properties:
+        id:        { type: integer, format: int64, example: 1 }
+        title:     { type: string, example: Hello }
+        content:   { type: string, example: My first post }
+        author:    { type: string, nullable: true, example: alice }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CommentRequest:
+      type: object
+      required: [postId, content]
+      properties:
+        postId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+        content:
+          type: string
+          minLength: 1
+          example: Nice post!
+        author:
+          type: string
+          maxLength: 100
+          nullable: true
+          example: bob
+
+    CommentResponse:
+      type: object
+      properties:
+        id:        { type: integer, format: int64, example: 1 }
+        postId:    { type: integer, format: int64, example: 1 }
+        content:   { type: string, example: Nice post! }
+        author:    { type: string, nullable: true, example: bob }
+        createdAt: { type: string, format: date-time }
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status:    { type: integer, example: 404 }
+        error:     { type: string, example: Not Found }
+        message:   { type: string, example: Post not found with id 42 }
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        status:    { type: integer, example: 400 }
+        error:     { type: string, example: Bad Request }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          example:
+            title: title is required
+            content: content is required
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationErrorResponse' }
+    PostServiceUnavailable:
+      description: |
+        `post-service` is down or unreachable, so the comment cannot be
+        validated. Returned by `comment-service`'s global exception handler
+        when the inter-service `RestClient` call fails.
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorResponse'
+              - type: object
+                properties:
+                  status: { example: 503 }
+                  error:  { example: Service Unavailable }
+                  message: { example: post-service is unavailable, cannot verify the post right now }

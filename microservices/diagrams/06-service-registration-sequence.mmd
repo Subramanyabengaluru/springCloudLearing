@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant SVC as post-service (:8081)
+    participant EU as Eureka Server (:8761)
+    participant CS as comment-service
+    participant LB as LoadBalancer (inside comment-service)
+
+    Note over SVC,EU: Startup — registration
+    SVC->>EU: register "POST-SERVICE @ 10.88.0.3:8081"
+    loop every 30s
+        SVC->>EU: heartbeat (still alive)
+    end
+
+    Note over CS,SVC: A call by service name
+    CS->>LB: GET http://post-service/api/posts/2/exists
+    LB->>EU: where is POST-SERVICE?
+    EU-->>LB: 10.88.0.3:8081
+    LB->>SVC: GET http://10.88.0.3:8081/api/posts/2/exists
+    SVC-->>LB: 200 OK
+    LB-->>CS: 200 OK
